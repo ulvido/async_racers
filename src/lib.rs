@@ -1,3 +1,8 @@
+use std::{
+    cell::{Cell, RefCell},
+    sync::{Arc, Mutex},
+};
+
 use rand::Rng;
 
 /// An F1 Race Event
@@ -12,11 +17,11 @@ use rand::Rng;
 ///
 /// ```
 ///
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Race<'a> {
     pub name: String,
     pub laps: u8,
-    pub racers: Vec<&'a Racer>,
+    pub racers: Arc<Mutex<Vec<&'a Racer>>>,
     pub winner: Option<&'a Racer>,
 }
 
@@ -31,17 +36,20 @@ impl<'a> Race<'a> {
         }
     }
     pub fn add_racer(&mut self, racer: &'a Racer) {
-        self.racers.push(racer);
+        self.racers.lock().unwrap().push(racer);
     }
 
-    // pub async fn start(&mut self) -> Racer {
-    //     for lap in 0..self.laps {
-    //         self.racers.iter_mut().for_each(|racer| {
-    //             racer.get_mut().do_lap();
-    //         });
-    //     }
-    //     Racer::default()
-    // }
+    pub async fn start(&mut self) {
+        for _ in 0..self.laps {
+            for racer in self.racers.lock().unwrap().iter() {
+                tokio::spawn(async move {
+                    racer.do_lap().await;
+                })
+                .await
+                .unwrap();
+            }
+        }
+    }
 }
 
 impl<'a> Default for Race<'a> {
@@ -49,7 +57,7 @@ impl<'a> Default for Race<'a> {
         Self {
             name: "".into(),
             laps: 88,
-            racers: Vec::new(),
+            racers: Arc::new(Mutex::new(Vec::new())),
             winner: None,
         }
     }
@@ -64,21 +72,21 @@ impl<'a> Default for Race<'a> {
 ///    best_lap_time: None,
 /// }
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct Racer {
     pub name: String,
-    pub current_lap: u8,
-    pub lap_times: Vec<u8>,
-    pub best_lap_time: Option<u8>,
+    pub current_lap: Arc<Mutex<u8>>,
+    pub lap_times: Arc<Mutex<Vec<u8>>>,
+    pub best_lap_time: Arc<Mutex<Option<u8>>>,
 }
 
 impl Default for Racer {
     fn default() -> Self {
         Self {
             name: "Schumaher".into(),
-            current_lap: 0,
-            lap_times: Vec::new(),
-            best_lap_time: None,
+            current_lap: Arc::new(Mutex::new(0)),
+            lap_times: Arc::new(Mutex::new(Vec::new())),
+            best_lap_time: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -93,24 +101,25 @@ impl Racer {
             ..Default::default()
         }
     }
-    pub async fn do_lap(mut self) {
-        let laptime: u8 = rand::thread_rng().gen();
-        self.lap_times.push(laptime);
+    pub async fn do_lap(&self) {
+        let laptime: u8 = rand::thread_rng().gen_range(100..=255);
+        self.lap_times.lock().unwrap().push(laptime);
         tokio::time::sleep(tokio::time::Duration::from_millis(laptime.into())).await;
-        self.current_lap += 1;
-        if let Some(best_lap_time) = self.best_lap_time {
+        let mut cl = self.current_lap.lock().unwrap();
+        *cl += 1;
+        if let Some(best_lap_time) = *self.best_lap_time.lock().unwrap() {
             if laptime < best_lap_time {
-                self.best_lap_time = Some(laptime)
+                *self.best_lap_time.lock().unwrap() = Some(laptime);
             }
         } else {
-            self.best_lap_time = Some(laptime)
+            *self.best_lap_time.lock().unwrap() = Some(laptime);
         }
+
+        println!(
+            "{} comleted lap {} in {}ms.",
+            self.name,
+            *self.current_lap.lock().unwrap(),
+            laptime
+        );
     }
 }
-
-// impl std::future::Future for Race<'_> {
-//   type Output = Racer;
-//   fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
-//       std::
-//   }
-// }
