@@ -10,11 +10,10 @@ use rand::Rng;
 /// // example race
 /// let race1 = Race {
 ///     name: "Monaco Grand Prix".into(),
-///     laps: 88,
+///     laps: 10,
 ///     racers: vec![],
 ///     winner: None,
 /// }
-///
 /// ```
 ///
 #[derive(Debug, Clone)]
@@ -68,7 +67,7 @@ impl<'a> Default for Race<'a> {
 /// // example racer
 /// let racer1 = Racer {
 ///    name: "Schumaher".into(),
-///    current_lap: 0,
+///    completed_lap_count: 0,
 ///    best_lap_time: None,
 /// }
 /// ```
